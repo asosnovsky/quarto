@@ -1,0 +1,82 @@
+#:kivy 1.0.9
+
+<WinBanner>:
+    canvas:
+        Color:
+            rgba: 0,0,0,0.5
+        Rectangle:
+            size: 600, 300
+            pos: self.center_x - 300, self.center_y - 150
+    Label:
+        center_x: root.center_x
+        center_y: root.center_y
+        font_size: 50
+        text: root.pname + " has won!"
+    
+
+        
+
+<BorderedRect>:
+    canvas:
+        Color:
+            rgba: 0, 0.9, 0.5, self.is_highlighted*0.75
+        Rectangle:
+            pos: self.x + self.size*0.1/2, self.y + self.size*0.1/2
+            size: self.size*(1-0.1), self.size*(1-0.1)
+
+        Color:
+            rgb: 1., 1., 1.
+        Rectangle:
+            pos: self.x, self.y
+            size: 1, self.size
+        Rectangle:
+            pos: self.x+self.size, self.y 
+            size: 1, self.size
+        Rectangle:
+            pos: self.x, self.y+self.size 
+            size: self.size, 1
+        Rectangle:
+            pos: self.x, self.y 
+            size: self.size, 1
+
+<GamePiece>:
+    canvas:
+        Color:
+            rgba: 0, 0.9, 0.5, self.is_highlighted*0.75
+        Rectangle:
+            pos: self.x + self.size*self.high_pad/2, self.y + self.size*self.high_pad/2
+            size: self.size*(1-self.high_pad), self.size*(1-self.high_pad)
+
+        Color:
+            rgba: self.is_white, self.is_white, self.is_white, 1-self.is_circle
+        Rectangle:
+            pos: self.x + self.size*self.outer_pad/2, self.y + self.size*self.outer_pad/2
+            size: self.size*(1-self.outer_pad), self.size*(1-self.outer_pad)
+        Color:
+            rgba: self.is_white, self.is_white, self.is_white, self.is_circle
+        Ellipse:
+            pos: self.x + self.size*self.outer_pad/2, self.y + self.size*self.outer_pad/2
+            size: self.size*(1-self.outer_pad), self.size*(1-self.outer_pad)
+        Color:
+            rgba: self.inner_color
+        Ellipse:
+            pos: self.x + self.size*self.inner_pad/2, self.y + self.size*self.inner_pad/2
+            size: self.size*(1-self.inner_pad), self.size*(1-self.inner_pad)
+    
+    Label:
+        color: 1-root.is_white, 1-root.is_white, 1-root.is_white, 0.5*root.is_tall
+        font_size: root.size/4  
+        center_x: root.x + root.size/2
+        center_y: root.y + root.size/2
+        text: "T"
+
+<QuartoGame>:
+    canvas.before:
+        Color:
+            rgba: 0.5, 0.5, 0.5, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+
+        
