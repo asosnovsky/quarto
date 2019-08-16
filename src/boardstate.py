@@ -5,20 +5,37 @@ from enum import Enum
 from typing import Tuple, Dict, Optional, Iterator, List
 from dataclasses import dataclass
 
+GamePieceTuple = Tuple[bool, bool, bool, bool]
+
 @dataclass
 class GamePiece:
+
     is_hole: bool
     is_circle: bool
     is_white: bool
     is_tall: bool
 
-    def into_tuple(self) -> Tuple[bool, bool, bool, bool]:
+    def into_tuple(self) -> GamePieceTuple:
         return (
             self.is_hole,
             self.is_circle,
             self.is_white,
             self.is_tall
         )
+    
+    def is_matched_with(self, others: Iterator[Optional[GamePieceTuple]]) -> bool:
+        agg = self.into_tuple()
+        for p in others:
+            if p is None: return False
+            else: 
+                agg = [
+                    a+b
+                    for a,b in zip(agg, p)
+                ]
+        for n in agg:
+            if (n == 4) or (n == 0):
+                return True
+        return False
 
     def __repr__(self):
         id = ""
@@ -51,7 +68,7 @@ class BoardState:
             for white in [True, False]
             for circle in [True, False]
         ]
-        self.win_state = None
+        self.win_state: Optional[Tuple[BoardState.WinType, BoardState.ID]] = None
         self.cpiece_id: Optional[int] = None
     
     @property
@@ -119,53 +136,50 @@ class BoardState:
         else:
             raise Exception(f"Invalid index ({x},{y}) !")
 
-    def check_win(self, x: int, y: int) -> Optional[WinType]:
+    def check_win(self, x: int, y: int) -> Optional[Tuple[WinType, ID]]:
         if self.__check_win_across_h(y):
-            return self.WinType.HORIZONTAL
+            return self.WinType.HORIZONTAL, (x, y)
         if self.__check_win_across_v(x):
-            return self.WinType.VERTICAL
+            return self.WinType.VERTICAL, (x, y)
         if self.__check_win_across_d(x, y):
-            return self.WinType.DIAGNAL
+            return self.WinType.DIAGNAL, (x, y)
         return None
 
     def __check_win_across_h(self, y: int) -> bool:
-        return self.__check_points(
+        return self.check_points_match(
             zip( range(4), repeat(y,4) )
         )
 
     def __check_win_across_v(self, x: int) -> bool:
-        return self.__check_points(
+        return self.check_points_match(
             zip(repeat(x,4), range(4) )
         )
 
     def __check_win_across_d(self, x: int, y: int) -> bool:
         if x == y:
-            return self.__check_points(
+            return self.check_points_match(
                 zip(range(4),range(4))
             )
         elif x + y == 3:
-            return self.__check_points(
+            return self.check_points_match(
                 zip(range(3,-1,-1),range(4))
             )
         return False
     
-    def __check_points(self, points: Iterator[ID]) -> bool:
+    def check_points_match(self, points: Iterator[ID]) -> bool:
         p1 = self[next(points)]
         if p1 is None:
             return False
         else:
-            agg = self.get_piece(p1).into_tuple()
-            for p in map(lambda p: self[p], points):
-                if p is None: return False
-                else: 
-                    agg = [
-                        a+b
-                        for a,b in zip(agg, self.get_piece(p).into_tuple())
-                    ]
-            for n in agg:
-                if (n == 4) or (n == 0):
-                    return True
-            return False
+            def get_piece_or_none(id: BoardState.ID) -> Optional[GamePieceTuple]:
+                p = self[id]
+                if p is None: return None
+                else: return self.get_piece(p).into_tuple()
+
+            return self.get_piece(p1).is_matched_with(map(
+                get_piece_or_none,
+                points
+            ))
 
     def __repr__(self):
         return f"<Board win={self.win_state}>\n " + (

@@ -13,7 +13,7 @@ from kivy.clock import Clock
 kivy.require('1.11.1')
 
 from .widgets import BorderedRect, Banner
-from .state import GameState
+from .state import GameState, BoardState
 
 
 class QuartoGame(Widget):
@@ -114,10 +114,23 @@ class QuartoGame(Widget):
                 is_highlighted = self.game_state.match_board_id(r, c)
             ))
             if v is not None:
+                is_highlighted = False
+                if self.game_state.board.win_state is not None:
+                    wstate, ref_p = self.game_state.board.win_state
+                    if wstate == BoardState.WinType.DIAGNAL:
+                        if ref_p[0] == ref_p[1]:
+                            is_highlighted = r == c
+                        else:
+                            is_highlighted = r + c == 3
+                    elif wstate == BoardState.WinType.HORIZONTAL:
+                        is_highlighted = c == ref_p[1]
+                    elif wstate == BoardState.WinType.VERTICAL:
+                        is_highlighted = r == ref_p[0]
                 self.add_widget(v.into_widget(
                     x=(r-2)*size + x, 
                     y=(c-2)*size + y, 
-                    size=size
+                    size=size,
+                    is_highlighted=is_highlighted
                 ))
     
     def draw_unused_pieces(self, size = 100):
@@ -148,7 +161,8 @@ class QuartoGame(Widget):
                 center_y = self.center_y - 75,
                 on_press = lambda _: self.game_state.reset(GameState.GameType.PvP, False)
             ))
-            Clock.schedule_once(self.update, 1.0 / 60.0)
+            # Clock.schedule_once(self.update, 1.0 / 60.0)
+            print(self.game_state.board)
         elif self.game_state.game_type == GameState.GameType.AvA:
             self.game_state.board.ai_random_move()
             self.game_state.switch_plauers()
