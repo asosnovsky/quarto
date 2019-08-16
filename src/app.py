@@ -161,8 +161,7 @@ class QuartoGame(Widget):
                 center_y = self.center_y - 75,
                 on_press = lambda _: self.game_state.reset(GameState.GameType.PvP, False)
             ))
-            # Clock.schedule_once(self.update, 1.0 / 60.0)
-            print(self.game_state.board)
+            Clock.schedule_once(self.update, 1.0 / 60.0)
         elif self.game_state.game_type == GameState.GameType.AvA:
             self.game_state.board.ai_random_move()
             self.game_state.switch_plauers()
