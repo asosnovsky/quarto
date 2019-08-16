@@ -197,6 +197,7 @@ class BoardState:
         self[random.choice(list(self.open_spots))] = self.cpiece_id
         if not self.is_full:
             self.cpiece_id, _ = random.choice(list(self.unused_game_pieces))
+        return self
 
     def get_piece_as_np(self, id: Optional[int]) -> np.ndarray:
         if id is not None:

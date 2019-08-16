@@ -14,7 +14,7 @@ kivy.require('1.11.1')
 
 from .widgets import BorderedRect, Banner
 from .state import GameState, BoardState
-
+from .ais import ai_3
 
 class QuartoGame(Widget):
     def __init__(self, **kwargs):
@@ -163,12 +163,12 @@ class QuartoGame(Widget):
             ))
             Clock.schedule_once(self.update, 1.0 / 60.0)
         elif self.game_state.game_type == GameState.GameType.AvA:
-            self.game_state.board.ai_random_move()
+            self.game_state.board = ai_3(self.game_state.board)
             self.game_state.switch_plauers()
             Clock.schedule_once(self.update, 15.0 / 60.0)
         elif self.game_state.game_type == GameState.GameType.PvA:
             if self.game_state.cplayer == GameState.PlayerState.PLAYER_2:
-                self.game_state.board.ai_random_move()
+                self.game_state.board = ai_3(self.game_state.board)
                 self.game_state.switch_plauers()
                 self.game_state.set_cboard_id_randomly()
                 Clock.schedule_once(self.update, 10.0 / 60.0)
