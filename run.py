@@ -1,3 +1,5 @@
-from src import QuartoApp
+from src.app import run_app
 
-QuartoApp().run()
+run_app()
+
+
