@@ -1,3 +1,4 @@
+from time import sleep
 from typing import Iterator, Optional, Callable
 from random import choice
 from itertools import repeat
@@ -5,6 +6,72 @@ from .boardstate import BoardState, GamePieceTuple, GamePiece
 
 AIPlayer = Callable[[BoardState], BoardState]
 
+def run_sim_once(ai1: AIPlayer, ai2: AIPlayer) -> Optional[int]:
+    """Runs a simulation of two ais, returns the winning player or None if a ties
+    
+    Arguments:
+        ai1 {AIPlayer}
+        ai2 {AIPlayer}
+    
+    Returns:
+        Optional[int] -- 0 for player 1, 1 for player 2 or None for a tie
+    """
+    current_ai = 0
+    board = BoardState()
+    try:
+        while True:
+            if board.win_state is None:
+                if board.is_full:
+                    return None
+                else:
+                    if current_ai == 0:
+                        board = ai1(board)
+                    else:
+                        board = ai2(board)
+                    current_ai = 1-current_ai
+            else:
+                return 1-current_ai
+    except Exception as e:
+        print(board)
+        raise e
+
+
+def run_vizsim_once(ai1: AIPlayer, ai2: AIPlayer) -> Optional[int]:
+    """Runs a simulation of two ais, returns the winning player or None if a ties
+        This differs from `run_sim_once` since it shows in console the simulation (slower)
+    
+    Arguments:
+        ai1 {AIPlayer}
+        ai2 {AIPlayer}
+    
+    Returns:
+        Optional[int] -- 0 for player 1, 1 for player 2 or None for a tie
+    """
+    current_ai = 0
+    board = BoardState()
+    try:
+        while True:
+            print('\n'*100)
+            print("current player:", current_ai)
+            print("current piece:", board.cpiece)
+            print(board)
+            if board.win_state is None:
+                if board.is_full:
+                    return None
+                else:
+                    if current_ai == 0:
+                        board = ai1(board)
+                    else:
+                        board = ai2(board)
+                    current_ai = 1-current_ai
+            else:
+                print("The winner is Player #", current_ai)
+                return 1-current_ai
+            sleep(0.5)
+    except Exception as e:
+        print(board)
+        raise e
+    
 def iter_to_pieces(board: BoardState, i: Iterator[BoardState.ID], cond: Callable[[BoardState.ID], bool]) -> Iterator[Optional[GamePieceTuple]]:
     for t in i:
         if not cond(t):
