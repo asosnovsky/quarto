@@ -1,3 +1,6 @@
+import random
+import numpy as np
+from itertools import permutations, repeat
 from enum import Enum
 from typing import Tuple, Dict, Optional, Iterator, List
 from dataclasses import dataclass
@@ -9,13 +12,14 @@ class GamePiece:
     is_white: bool
     is_tall: bool
 
-    def matched_with(self, other) -> bool:
+    def into_tuple(self) -> Tuple[bool, bool, bool, bool]:
         return (
-            ( self.is_hole == other.is_hole ) |            
-            ( self.is_circle == other.is_circle ) |            
-            ( self.is_white == other.is_white ) |            
-            ( self.is_tall== other.is_tall )             
+            self.is_hole,
+            self.is_circle,
+            self.is_white,
+            self.is_tall
         )
+
     def __repr__(self):
         id = ""
         id += ( "h" if self.is_hole else "_" )
@@ -23,13 +27,15 @@ class GamePiece:
         id += ( "w" if self.is_white else "_" )
         id += ( "t" if self.is_tall else "_" )
         return id
+    
         
 class BoardState:
     class WinType(Enum):
-        HORIZONTAL = "h"
-        VERTICAL = "v"
-        DIAGNAL = "d"
-        SQUARE = "s"
+        HORIZONTAL = (1,0,0,0)
+        VERTICAL = (0,1,0,0)
+        DIAGNAL = (0,0,1,0)
+        SQUARE = (0,0,0,1)
+
     ID = Tuple[int, int]
     DATA = Optional[int]
     def __init__(self):
@@ -46,7 +52,14 @@ class BoardState:
             for circle in [True, False]
         ]
         self.win_state = None
+        self.cpiece_id: Optional[int] = None
     
+    @property
+    def cpiece(self) -> Optional[GamePiece]:
+        if self.cpiece_id is not None:
+            return self.get_piece(self.cpiece_id)
+        return None
+
     def iter_gamepieces(self) -> Iterator[GamePiece]:
         return iter(self.__game_pieces)
     
@@ -88,6 +101,13 @@ class BoardState:
             if v is None:
                 yield k
     
+    @property
+    def unused_game_pieces(self) -> Iterator[Tuple[int, GamePiece]]:
+        for i, gp in enumerate(self.iter_gamepieces()):
+            if not self.is_piece_id_in_board(i):
+                if i != self.cpiece_id:
+                    yield i, gp
+    
     def __getitem__(self, index: ID) -> DATA:
         return self.__board[index]
 
@@ -101,70 +121,89 @@ class BoardState:
 
     def check_win(self, x: int, y: int) -> Optional[WinType]:
         if self.__check_win_across_h(y):
-            return self.WinType.VERTICAL
-        if self.__check_win_across_v(x):
             return self.WinType.HORIZONTAL
+        if self.__check_win_across_v(x):
+            return self.WinType.VERTICAL
         if self.__check_win_across_d(x, y):
             return self.WinType.DIAGNAL
         return None
 
     def __check_win_across_h(self, y: int) -> bool:
-        idx = self[0, y]
-        if idx is not None:
-            cp = self.get_piece(idx)
-            for x in range(1, 4):
-                idx = self[x, y]
-                if idx is not None:
-                    if not cp.matched_with(self.get_piece(idx)):
-                        return False
-                else: return False
-            return True
-        return False
+        return self.__check_points(
+            zip( range(4), repeat(y,4) )
+        )
 
     def __check_win_across_v(self, x: int) -> bool:
-        idx = self[x, 0]
-        if idx is not None:
-            cp = self.get_piece(idx)
-            for y in range(1, 4):
-                idx = self[x, y]
-                if idx is not None:
-                    if not cp.matched_with(self.get_piece(idx)):
-                        return False
-                else: return False
-            return True
-        return False
+        return self.__check_points(
+            zip(repeat(x,4), range(4) )
+        )
 
     def __check_win_across_d(self, x: int, y: int) -> bool:
         if x == y:
-            idx = self[0,0]
-            if idx is not None:
-                cp = self.get_piece(idx)
-                for t in range(1, 4):
-                    idx = self[t, t]
-                    if idx is not None:
-                        if not cp.matched_with(self.get_piece(idx)):
-                            return False
-                    else: return False
-                return True
+            return self.__check_points(
+                zip(range(4),range(4))
+            )
         elif x + y == 3:
-            idx = self[0,3]
-            if idx is not None:
-                cp = self.get_piece(idx)
-                for t in range(1, 4):
-                    idx = self[t, 3-t]
-                    if idx is not None:
-                        if not cp.matched_with(self.get_piece(idx)):
-                            return False
-                    else: return False
-                return True
+            return self.__check_points(
+                zip(range(3,-1,-1),range(4))
+            )
         return False
+    
+    def __check_points(self, points: Iterator[ID]) -> bool:
+        p1 = self[next(points)]
+        if p1 is None:
+            return False
+        else:
+            agg = self.get_piece(p1).into_tuple()
+            for p in map(lambda p: self[p], points):
+                if p is None: return False
+                else: 
+                    agg = [
+                        a+b
+                        for a,b in zip(agg, self.get_piece(p).into_tuple())
+                    ]
+            for n in agg:
+                if (n == 4) or (n == 0):
+                    return True
+            return False
+
     def __repr__(self):
         return f"<Board win={self.win_state}>\n " + (
             "\n ".join([
                 " | ".join([
                     f"{self.get_piece(self[x,y])}" if self[x,y] is not None else f"    "
-                    for y in range(4)
+                    for x in range(4)
                 ])
-                for x in range(4)
+                for y in range(3,-1,-1)
             ])
         ) + "\n<Board/>"
+
+    
+    def ai_random_move(self):
+        self[random.choice(list(self.open_spots))] = self.cpiece_id
+        if not self.is_full:
+            self.cpiece_id, _ = random.choice(list(self.unused_game_pieces))
+
+    def get_piece_as_np(self, id: Optional[int]) -> np.ndarray:
+        if id is not None:
+            return np.array([*self.get_piece(id).into_tuple(), False], dtype="bool")
+        else:
+            return np.zeros(shape=(5,), dtype="bool")
+
+    def into_numpy(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Converts the state into three numpy arrays
+        
+        Returns:
+            Tuple[np.ndarray[4,], np.ndarray] -- the first is the currently selected piece, the second the state of the board
+        """
+        return (
+            # Win State : anything but 4 zeros mean win!
+            np.array((0,0,0,0) if self.win_state is None else self.win_state.value, dtype="bool"),
+            # Piece provided by last player
+            self.get_piece_as_np(self.cpiece_id),
+            # Board
+            np.array([[
+                self.get_piece_as_np(self[x,y])
+                for y in range(4)
+            ] for x in range(4) ])
+        )

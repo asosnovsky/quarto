@@ -2,11 +2,12 @@ from typing import Tuple
 from kivy.uix.widget import Widget
 from kivy.properties import (
     NumericProperty, BooleanProperty,
-    StringProperty
+    StringProperty, ListProperty
 )
 
-class WinBanner(Widget):
-    pname = StringProperty()
+class Banner(Widget):
+    text = StringProperty()
+    size = ListProperty([600, 300])
 
 class BorderedRect(Widget):
     x = NumericProperty(0) 

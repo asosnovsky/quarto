@@ -4,11 +4,7 @@ from typing import Tuple, List, Dict, Optional, Iterator
 from dataclasses import dataclass
 from .widgets import GamePiece
 from .boardstate import BoardState, GamePiece as GamePieceState
-
-class PlayerState(Enum):
-    PLAYER_1 = 'player 1'
-    PLAYER_2 = 'player 2'
-            
+          
 
 def gp_into_widget(self: GamePieceState, x: float, y: float, is_highlighted: bool = False, size: float = 100) -> GamePiece:
     return GamePiece(
@@ -23,21 +19,32 @@ def gp_into_widget(self: GamePieceState, x: float, y: float, is_highlighted: boo
 GamePieceState.into_widget = gp_into_widget
 
 class GameState:
+    class PlayerState(Enum):
+        PLAYER_1 = 'player 1'
+        PLAYER_2 = 'player 2'
+
+    class GameType:
+        PvP = "human vs human"
+        PvA = "human vs AI"
+        AvA = "AI vs AI"
+
     def __init__(self):
-        self.reset()
+        self.reset(self.GameType.PvP)
         
-    def reset(self):
+    def reset(self, game_type: GameType, started: bool = False):
+        self.started = started
         self.board = BoardState()
-        self.cplayer: PlayerState = PlayerState.PLAYER_1 if random() < 0.5 else PlayerState.PLAYER_2
-        self.cpiece_id: Optional[int] = None
+        self.game_type = game_type
+        self.cplayer = GameState.PlayerState.PLAYER_2
+        # self.cplayer: GameState.PlayerState = GameState.PlayerState.PLAYER_1 if random() < 0.5 else GameState.PlayerState.PLAYER_2
         self.cboard_id: Optional[Tuple[int, int]] = None
-        self.current_highlight = choice(list(self.unused_game_pieces))[0]
+        self.current_highlight = choice(list(self.board.unused_game_pieces))[0]
 
     def switch_plauers(self):
-        if self.cplayer == PlayerState.PLAYER_1:
-            self.cplayer = PlayerState.PLAYER_2
+        if self.cplayer == GameState.PlayerState.PLAYER_1:
+            self.cplayer = GameState.PlayerState.PLAYER_2
         else:
-            self.cplayer = PlayerState.PLAYER_1
+            self.cplayer = GameState.PlayerState.PLAYER_1
 
     def match_board_id(self, r: int, c: int) -> bool:
         if self.cboard_id is not None:
@@ -46,7 +53,7 @@ class GameState:
     
     def set_highlight_randomly(self):
         if not self.board.is_full:
-            self.current_highlight = choice(list(self.unused_game_pieces))[0] 
+            self.current_highlight = choice(list(self.board.unused_game_pieces))[0] 
 
     def set_cboard_id_randomly(self):
         if not self.board.is_full:
@@ -80,28 +87,8 @@ class GameState:
             self.current_highlight += 8
 
         if self.board.is_piece_id_in_board(self.current_highlight):
-            self.current_highlight = last_ch
-
-    @property
-    def board_is_full(self) -> bool:
-        for v in self.board.values():
-            if v is None:
-                return False
-        return True
-
-    @property
-    def cpiece(self) -> Optional[GamePieceState]:
-        if self.cpiece_id is not None:
-            return self.board.get_piece(self.cpiece_id)
-        return None
-
-    @property
-    def unused_game_pieces(self) -> Iterator[Tuple[int, GamePieceState]]:
-        for i, gp in enumerate(self.board.iter_gamepieces()):
-            if not self.board.is_piece_id_in_board(i):
-                if i != self.cpiece_id:
-                    yield i, gp
-    
+            self.next_highlight_v(False, iter_safety=1)
+   
     def __iter__(self):
         for (r,c), v in self.board.iter_iddata():
             if v is not None:
