@@ -69,6 +69,7 @@ class BoardState:
             for circle in [True, False]
         ]
         self.win_state: Optional[Tuple[BoardState.WinType, BoardState.ID]] = None
+        self.last_move: Optional[Tuple[BoardState.ID, DATA]] = None
         self.cpiece_id: Optional[int] = None
     
     @property
@@ -132,6 +133,7 @@ class BoardState:
         (x,y) = index
         if (x < 4) & (y < 4):
             self.__board[index] = value
+            self.last_move = ((x, y), value)
             self.win_state = self.check_win(x, y)
         else:
             raise Exception(f"Invalid index ({x},{y}) !")
@@ -205,20 +207,20 @@ class BoardState:
         else:
             return np.zeros(shape=(5,), dtype="bool")
 
-    def into_numpy(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Converts the state into three numpy arrays
+    def into_numpy(self, as_categorical = False) -> np.ndarray:
+        """Converts the board into numpy array
         
         Returns:
-            Tuple[np.ndarray[4,], np.ndarray] -- the first is the currently selected piece, the second the state of the board
+            np.ndarray[4,4]
         """
-        return (
-            # Win State : anything but 4 zeros mean win!
-            np.array((0,0,0,0) if self.win_state is None else self.win_state.value, dtype="bool"),
-            # Piece provided by last player
-            self.get_piece_as_np(self.cpiece_id),
-            # Board
-            np.array([[
+        if as_categorical:
+            return np.array([[
                 self.get_piece_as_np(self[x,y])
                 for y in range(4)
             ] for x in range(4) ])
-        )
+        else:
+            return np.array([[
+                -1 if self[x,y] is None else self[x,y]
+                for y in range(4)
+            ] for x in range(4) ])
+    

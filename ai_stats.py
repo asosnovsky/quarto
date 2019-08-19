@@ -2,7 +2,6 @@ from tqdm import tqdm
 from src.ai_helpters import run_sim_once
 from src.ais import ai_1, ai_2, ai_3, dumb_ai
 
-
 test = [
     ("dumb ai fight", dumb_ai, dumb_ai),
     ("dumb ai vs ai1", dumb_ai, ai_1),

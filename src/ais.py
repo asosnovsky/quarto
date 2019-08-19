@@ -40,7 +40,7 @@ def ai_2(board: BoardState) -> BoardState:
     return board
 
 def ai_3(board: BoardState) -> BoardState:
-    """This AI will always give a none-winable piece (if there is one) and will place randomly
+    """This AI will always give a none-winable piece (if there is one) and will only choose winable placements when possible
     """
     cur_piece = board.cpiece
     if cur_piece is not None:
