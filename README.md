@@ -5,3 +5,7 @@ an implementation of the game [Quarto](https://en.wikipedia.org/wiki/Quarto_(boa
 # Requirements 
 - [Python 3.7+](https://www.python.org/)
 - [Kivy](https://kivy.org/#home)
+
+# Running
+
+Simply run `python run.py`
