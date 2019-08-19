@@ -162,6 +162,21 @@ class QuartoGame(Widget):
                 on_press = lambda _: self.game_state.reset(GameState.GameType.PvP, False)
             ))
             Clock.schedule_once(self.update, 1.0 / 60.0)
+        if self.game_state.board.is_full:
+            self.add_widget(Banner(
+                text=f"It's a tie!",
+                size=[650, 300],
+                center_x=self.center_x,
+                center_y=self.center_y,
+            ))
+            self.add_widget(Button(
+                text = "Play Again",
+                size= (100, 50),
+                center_x = self.center_x,
+                center_y = self.center_y - 75,
+                on_press = lambda _: self.game_state.reset(GameState.GameType.PvP, False)
+            ))
+            Clock.schedule_once(self.update, 1.0 / 60.0)
         elif self.game_state.game_type == GameState.GameType.AvA:
             self.game_state.board = ai_3(self.game_state.board)
             self.game_state.switch_plauers()
