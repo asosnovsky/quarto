@@ -162,7 +162,7 @@ class QuartoGame(Widget):
                 on_press = lambda _: self.game_state.reset(GameState.GameType.PvP, False)
             ))
             Clock.schedule_once(self.update, 1.0 / 60.0)
-        if self.game_state.board.is_full:
+        elif self.game_state.board.is_full:
             self.add_widget(Banner(
                 text=f"It's a tie!",
                 size=[650, 300],

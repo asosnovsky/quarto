@@ -210,7 +210,8 @@ class BoardState:
 
     
     def ai_random_move(self):
-        self[random.choice(list(self.open_spots))] = self.cpiece_id
+        if self.cpiece_id is not None:
+            self[random.choice(list(self.open_spots))] = self.cpiece_id
         if not self.is_full:
             self.cpiece_id, _ = random.choice(list(self.unused_game_pieces))
         return self
