@@ -60,8 +60,3 @@ train = gen_train_samples(ai_3, 1)
 train_df = pd.DataFrame(map(dataclasses.asdict, train))
 
 train_df
-
-def is_dataclass_instance(item) -> bool:
-    return dataclasses.is_dataclass(item) and not isinstance(item, type)
-
-    
