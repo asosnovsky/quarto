@@ -198,7 +198,7 @@ class BoardState:
             ))
 
     def __repr__(self):
-        return f"<Board win={self.win_state}>\n " + (
+        return f"<Board win={self.win_state} cpiece={self.cpiece}>\n " + (
             "\n ".join([
                 " | ".join([
                     f"{self.get_piece(self[x,y])}" if self[x,y] is not None else f"    "
