@@ -12,13 +12,13 @@ from src.boardstate import BoardState, GamePieceTuple, GamePiece
 @dataclasses.dataclass
 class Observation:
     game_id: int
-    board: np.ndarray
-    piece_to_place: np.ndarray
+    board: str
+    piece_to_place: int
     # piece_to_place: int
     placement: Tuple[int, int]
-    piece_to_give: np.ndarray
+    piece_to_give: int
     # piece_to_give: int
-    reward: int = 0
+    reward: float = 0.0
 
 def gen_train_samples(AI: AIPlayer, runs=1000, discount_factor = 0.9, win_reward = 1, lose_reward = -1) -> List[Observation]:
     obs : List[Observation] = []
@@ -27,12 +27,12 @@ def gen_train_samples(AI: AIPlayer, runs=1000, discount_factor = 0.9, win_reward
         board.ai_random_move()
         first_idx = len(obs)
         for i in range(20):
-            b = board.into_numpy(True)
-            # ptp = -1 if board.cpiece_id is None else board.cpiece_id
-            ptp = board.get_piece_as_np(board.cpiece_id)
+            b = QTable.get_key_from_board(board)
+            ptp = board.cpiece_id
+            # ptp = board.get_piece_as_np(board.cpiece_id)
             board = AI(board)
             placement = board.last_move[0]
-            # ptg = -1 if board.cpiece_id is None else board.cpiece_id
+            ptg = board.cpiece_id
             ptg = board.get_piece_as_np(board.cpiece_id)
             if board.win_state is not None:
                 win_player = game_id % 2 == 0
@@ -59,4 +59,7 @@ def gen_train_samples(AI: AIPlayer, runs=1000, discount_factor = 0.9, win_reward
 train = gen_train_samples(ai_3, 1)
 train_df = pd.DataFrame(map(dataclasses.asdict, train))
 
-train_df
+for row in train_df.iterrows():
+    qtable.update(row.board, row)
+
+
