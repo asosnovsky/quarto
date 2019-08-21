@@ -2,7 +2,7 @@ from time import sleep
 from typing import Iterator, Optional, Callable
 from random import choice
 from itertools import repeat
-from .boardstate import BoardState, GamePieceTuple, GamePiece
+from ..boardstate import BoardState, GamePieceTuple, GamePiece
 
 AIPlayer = Callable[[BoardState], BoardState]
 

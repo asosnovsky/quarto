@@ -14,7 +14,7 @@ kivy.require('1.11.1')
 
 from .widgets import BorderedRect, Banner
 from .state import GameState, BoardState
-from .ais import ai_3
+from .ai import ai_3
 
 class QuartoGame(Widget):
     def __init__(self, **kwargs):
