@@ -1,12 +1,13 @@
+import numpy as np
 from time import sleep
-from typing import Iterator, Optional, Callable
+from typing import Iterator, Optional, Callable, List
 from random import choice
 from itertools import repeat
 from ..boardstate import BoardState, GamePieceTuple, GamePiece
 
 AIPlayer = Callable[[BoardState], BoardState]
 
-def run_sim_once(ai1: AIPlayer, ai2: AIPlayer) -> Optional[int]:
+def run_sim_once(ai1: AIPlayer, ai2: AIPlayer, use_names = True) -> Optional[str]:
     """Runs a simulation of two ais, returns the winning player or None if a ties
     
     Arguments:
@@ -16,7 +17,9 @@ def run_sim_once(ai1: AIPlayer, ai2: AIPlayer) -> Optional[int]:
     Returns:
         Optional[int] -- 0 for player 1, 1 for player 2 or None for a tie
     """
-    current_ai = 0
+    ai1_name = f"Player 1: {ai1.__name__}" if use_names else 'Player 1'
+    ai2_name = f"Player 2: {ai1.__name__}" if use_names else 'Player 2'
+    current_ai = ai1_name
     board = BoardState()
     try:
         while True:
@@ -24,13 +27,14 @@ def run_sim_once(ai1: AIPlayer, ai2: AIPlayer) -> Optional[int]:
                 if board.is_full:
                     return None
                 else:
-                    if current_ai == 0:
+                    if current_ai == ai1_name:
                         board = ai1(board)
+                        current_ai = ai2_name
                     else:
+                        current_ai = ai1_name
                         board = ai2(board)
-                    current_ai = 1-current_ai
             else:
-                return 1-current_ai
+                return ai1_name if current_ai == ai2_name else ai2_name
     except Exception as e:
         print(board)
         raise e
@@ -73,6 +77,18 @@ def run_vizsim_once(ai1: AIPlayer, ai2: AIPlayer) -> Optional[int]:
         raise e
     
 def iter_to_pieces(board: BoardState, i: Iterator[BoardState.ID], cond: Callable[[BoardState.ID], bool]) -> Iterator[Optional[GamePieceTuple]]:
+    """yeilds GamePieces in tuple form who's id are in the id list and match the condition
+    loops over the provided id list, checks the condition against those i
+    ds then yeilds if the cond return true otherwise return None
+    
+    Arguments:
+        board {BoardState}
+        i {Iterator[BoardState.ID]} -- a list of ids
+        cond {Callable[[BoardState.ID], bool]} -- the condition that validates the id
+    
+    Returns:
+        Iterator[Optional[GamePieceTuple]]
+    """
     for t in i:
         if not cond(t):
             p = board[t]
@@ -112,12 +128,105 @@ def find_win_spot(cur_piece: GamePiece, board: BoardState) -> Optional[BoardStat
     return None
 
 
-def choose_none_winable_piece(board) -> Optional[int]:
-    none_winable_pieces = [
-        id
-        for id, gp in board.unused_game_pieces
-        if find_win_spot(gp, board) is None
-    ]
+def choose_none_winable_pieces(board: BoardState) -> Iterator[int]:
+    for id, gp in board.unused_game_pieces:
+        if find_win_spot(gp, board) is None:
+            yield id
+
+def choose_none_winable_piece(board: BoardState) -> Optional[int]:
+    none_winable_pieces = list(choose_none_winable_pieces(board))
     if len(none_winable_pieces) > 0:
         return choice(none_winable_pieces)
     return None
+
+def find_most_similar_piece(board: BoardState, cpiece: GamePiece) -> Optional[int]:
+    p_np = np.array(cpiece.into_tuple(), dtype='int')
+    it = choose_none_winable_pieces(board)
+
+    try:
+        c_p = next(it)
+    except StopIteration:
+        return None
+
+    c_pn = np.array(board.get_piece(c_p).into_tuple(), dtype='int')
+    c_sim = ((c_pn - p_np) ** 2).sum()
+
+    for p in it:
+        pn = np.array(board.get_piece(p).into_tuple(), dtype='int')
+        sim = ((pn - p_np) ** 2).sum()
+        if sim < c_sim:
+            c_p, c_pn, c_sim = p, pn, sim
+
+    return c_p
+
+
+def find_most_dissimilar_piece(board: BoardState, cpiece: GamePiece) -> Optional[int]:
+    p_np = np.array(cpiece.into_tuple(), dtype='int')
+    it = choose_none_winable_pieces(board)
+
+    try:
+        c_p = next(it)
+    except StopIteration:
+        return None
+
+    c_pn = np.array(board.get_piece(c_p).into_tuple(), dtype='int')
+    c_sim = ((c_pn - p_np) ** 2).sum()
+
+    for p in it:
+        pn = np.array(board.get_piece(p).into_tuple(), dtype='int')
+        sim = ((pn - p_np) ** 2).sum()
+        if sim > c_sim:
+            c_p, c_pn, c_sim = p, pn, sim
+
+    return c_p
+
+
+def get_open_dissimilar_spot(board: BoardState, cpiece: GamePiece, axis = 0) -> Optional[BoardState.ID]:
+    b_np = board.into_numpy(True)
+    p_np = np.array(cpiece.into_tuple())
+    open_spots = np.array(list(board.open_spots))
+    if open_spots.shape[0] == 0:
+        return None
+    it = iter(set(open_spots[:,axis]))
+
+    def compute_sim(r: int) -> int:
+        if axis == 0:
+            filled_ones = b_np[r,:,:-1][b_np[r,:,-1]]
+        else:
+            filled_ones = b_np[:,r,:-1][b_np[:,r,-1]]
+        if filled_ones.shape[0] > 0:
+            return ((filled_ones == p_np).sum(axis=1) > 0).sum() / filled_ones.shape[0]
+        return 0
+
+    c_r, c_sim = 0, compute_sim(next(it))
+    for r in it:
+        sim = compute_sim(r)
+        if sim > c_sim:
+            c_r, c_sim = r, sim
+
+    return tuple(open_spots[(open_spots[:,0] == c_r).argmax(),:])
+
+def get_open_similar_spot(board: BoardState, cpiece: GamePiece, axis = 0) -> Optional[BoardState.ID]:
+    b_np = board.into_numpy(True)
+    p_np = np.array(cpiece.into_tuple())
+    open_spots = np.array(list(board.open_spots))
+    if open_spots.shape[0] == 0:
+        return None
+    it = iter(set(open_spots[:,axis]))
+
+    def compute_sim(r: int) -> int:
+        if axis == 0:
+            filled_ones = b_np[r,:,:-1][b_np[r,:,-1]]
+        else:
+            filled_ones = b_np[:,r,:-1][b_np[:,r,-1]]
+        if filled_ones.shape[0] > 0:
+            return ((filled_ones == p_np).sum(axis=1) > 0).sum() / filled_ones.shape[0]
+        return 0
+
+    c_r, c_sim = 0, compute_sim(next(it))
+    for r in it:
+        sim = compute_sim(r)
+        if sim < c_sim:
+            c_r, c_sim = r, sim
+
+    return tuple(open_spots[(open_spots[:,0] == c_r).argmax(),:])
