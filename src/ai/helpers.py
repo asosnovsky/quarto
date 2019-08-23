@@ -1,7 +1,7 @@
 import numpy as np
 from time import sleep
 from typing import Iterator, Optional, Callable, List
-from random import choice
+from random import choice, random
 from itertools import repeat
 from ..boardstate import BoardState, GamePieceTuple, GamePiece
 
@@ -51,7 +51,7 @@ def run_vizsim_once(ai1: AIPlayer, ai2: AIPlayer) -> Optional[int]:
     Returns:
         Optional[int] -- 0 for player 1, 1 for player 2 or None for a tie
     """
-    current_ai = 0
+    current_ai = ai1.__name__ if random() < 0.5 else ai2.__name__
     board = BoardState()
     try:
         while True:
@@ -63,14 +63,19 @@ def run_vizsim_once(ai1: AIPlayer, ai2: AIPlayer) -> Optional[int]:
                 if board.is_full:
                     return None
                 else:
-                    if current_ai == 0:
+                    if current_ai == ai1.__name__:
                         board = ai1(board)
+                        current_ai = ai2.__name__
                     else:
                         board = ai2(board)
-                    current_ai = 1-current_ai
+                        current_ai = ai1.__name__
             else:
+                if current_ai == ai1.__name__:
+                    current_ai = ai2.__name__
+                else:
+                    current_ai = ai1.__name__
                 print("The winner is Player #", current_ai)
-                return 1-current_ai
+                return current_ai
             sleep(0.5)
     except Exception as e:
         print(board)
@@ -103,6 +108,14 @@ def update_board_then_give_random(board: BoardState, move: BoardState.ID) -> Boa
         board.cpiece_id, _ = choice(list(board.unused_game_pieces))
     return board
 
+ActionPlacement = Callable[[BoardState, GamePiece], Optional[BoardState.ID]]
+def try_actions(board: BoardState, cur_piece: GamePiece, actions: List[ActionPlacement]) -> Optional[BoardState.ID]:
+    for action in actions:
+        move = action(board, cur_piece)
+        if move:
+            return move
+    return None
+
 def find_win_spot(cur_piece: GamePiece, board: BoardState) -> Optional[BoardState.ID]:
     for (x,y) in board.open_spots:
         if cur_piece.is_matched_with(iter_to_pieces(
@@ -127,6 +140,12 @@ def find_win_spot(cur_piece: GamePiece, board: BoardState) -> Optional[BoardStat
         )): return (x,y)
     return None
 
+def find_win_spot_in_board(board: BoardState, cur_piece: GamePiece) -> Optional[BoardState.ID]:
+    for (x,y) in board.open_spots:
+        move = find_win_spot(cur_piece, board)
+        if move is not None:
+            return move
+    return None
 
 def choose_none_winable_pieces(board: BoardState) -> Iterator[int]:
     for id, gp in board.unused_game_pieces:
@@ -204,7 +223,7 @@ def get_open_dissimilar_spot(board: BoardState, cpiece: GamePiece, axis = 0) -> 
         if sim > c_sim:
             c_r, c_sim = r, sim
 
-    return tuple(open_spots[(open_spots[:,0] == c_r).argmax(),:])
+    return tuple(open_spots[(open_spots[:,0] == c_r).argmax(),:]) # type: ignore
 
 def get_open_similar_spot(board: BoardState, cpiece: GamePiece, axis = 0) -> Optional[BoardState.ID]:
     b_np = board.into_numpy(True)
@@ -229,4 +248,4 @@ def get_open_similar_spot(board: BoardState, cpiece: GamePiece, axis = 0) -> Opt
         if sim < c_sim:
             c_r, c_sim = r, sim
 
-    return tuple(open_spots[(open_spots[:,0] == c_r).argmax(),:])
+    return tuple(open_spots[(open_spots[:,0] == c_r).argmax(),:]) # type: ignore

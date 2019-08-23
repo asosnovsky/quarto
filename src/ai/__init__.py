@@ -3,7 +3,7 @@ from time import sleep
 from typing import Iterator, Optional, Callable
 from random import choice
 from itertools import repeat
-from functools import reduce
+from functools import reduce, partial
 from ..boardstate import BoardState, GamePieceTuple
 from .helpers import *
 from .maker import AIPlayerMaker, into_aiplayer
@@ -42,7 +42,7 @@ class ai_3(AIPlayerMaker):
     """This AI will always give a none-winable piece (if there is one) and will place a none-winable piece
     """
     def select_piece_placement(self, board: BoardState, cur_piece: GamePiece) -> Optional[BoardState.ID]:
-        return None
+        return find_win_spot_in_board(board, cur_piece)
     def select_giving_piece(self, board: BoardState, cur_piece: Optional[GamePiece]) -> BoardState.DATA:
         return choose_none_winable_piece(board)
 
@@ -51,7 +51,7 @@ class ai_3s(AIPlayerMaker):
     """This AI will always give a none-winable most similar piece (if there is one) and will place a none-winable piece
     """
     def select_piece_placement(self, board: BoardState, cur_piece: GamePiece) -> Optional[BoardState.ID]:
-        return None
+        return find_win_spot_in_board(board, cur_piece)
     def select_giving_piece(self, board: BoardState, cur_piece: Optional[GamePiece]) -> BoardState.DATA:
         if cur_piece is None:
             return choose_none_winable_piece(board)
@@ -63,7 +63,7 @@ class ai_3d(AIPlayerMaker):
     """This AI will always give a none-winable most dissimilar piece (if there is one) and will place a none-winable piece
     """
     def select_piece_placement(self, board: BoardState, cur_piece: GamePiece) -> Optional[BoardState.ID]:
-        return None
+        return find_win_spot_in_board(board, cur_piece)
     def select_giving_piece(self, board: BoardState, cur_piece: Optional[GamePiece]) -> BoardState.DATA:
         if cur_piece is None:
             return choose_none_winable_piece(board)
@@ -73,10 +73,11 @@ class ai_3d(AIPlayerMaker):
 @into_aiplayer
 class ai_dp_ms(AIPlayerMaker):
     def select_piece_placement(self, board: BoardState, cur_piece: GamePiece) -> Optional[BoardState.ID]:
-        move = get_open_dissimilar_spot(board, cur_piece, 0)
-        if move is None:
-            return get_open_dissimilar_spot(board, cur_piece, 1)
-        return move
+        return try_actions(board, cur_piece, [
+            find_win_spot_in_board,
+            partial(get_open_dissimilar_spot, axis=0),
+            partial(get_open_dissimilar_spot, axis=1),
+        ])
     def select_giving_piece(self, board: BoardState, cur_piece: Optional[GamePiece]) -> BoardState.DATA:
         if cur_piece is None:
             return choose_none_winable_piece(board)
@@ -86,10 +87,11 @@ class ai_dp_ms(AIPlayerMaker):
 @into_aiplayer
 class ai_sp_ms(AIPlayerMaker):
     def select_piece_placement(self, board: BoardState, cur_piece: GamePiece) -> Optional[BoardState.ID]:
-        move = get_open_similar_spot(board, cur_piece, 0)
-        if move is None:
-            return get_open_similar_spot(board, cur_piece, 1)
-        return move
+        return try_actions(board, cur_piece, [
+            find_win_spot_in_board,
+            partial(get_open_similar_spot, axis=0),
+            partial(get_open_similar_spot, axis=1),
+        ])
     def select_giving_piece(self, board: BoardState, cur_piece: Optional[GamePiece]) -> BoardState.DATA:
         if cur_piece is None:
             return choose_none_winable_piece(board)
@@ -99,10 +101,11 @@ class ai_sp_ms(AIPlayerMaker):
 @into_aiplayer
 class ai_sp_dp(AIPlayerMaker):
     def select_piece_placement(self, board: BoardState, cur_piece: GamePiece) -> Optional[BoardState.ID]:
-        move = get_open_similar_spot(board, cur_piece, 0)
-        if move is None:
-            return get_open_similar_spot(board, cur_piece, 1)
-        return move
+        return try_actions(board, cur_piece, [
+            find_win_spot_in_board,
+            partial(get_open_similar_spot, axis=0),
+            partial(get_open_similar_spot, axis=1),
+        ])
     def select_giving_piece(self, board: BoardState, cur_piece: Optional[GamePiece]) -> BoardState.DATA:
         if cur_piece is None:
             return choose_none_winable_piece(board)
@@ -112,10 +115,11 @@ class ai_sp_dp(AIPlayerMaker):
 @into_aiplayer
 class ai_dp_dp(AIPlayerMaker):
     def select_piece_placement(self, board: BoardState, cur_piece: GamePiece) -> Optional[BoardState.ID]:
-        move = get_open_dissimilar_spot(board, cur_piece, 0)
-        if move is None:
-            return get_open_dissimilar_spot(board, cur_piece, 1)
-        return move
+        return try_actions(board, cur_piece, [
+            find_win_spot_in_board,
+            partial(get_open_dissimilar_spot, axis=0),
+            partial(get_open_dissimilar_spot, axis=1),
+        ])
     def select_giving_piece(self, board: BoardState, cur_piece: Optional[GamePiece]) -> BoardState.DATA:
         if cur_piece is None:
             return choose_none_winable_piece(board)
