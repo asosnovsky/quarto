@@ -15,6 +15,10 @@ class GamePiece:
     is_white: bool
     is_tall: bool
 
+    @classmethod
+    def from_binary(cls, binary: Tuple[bool, bool, bool, bool]):
+        return cls(*binary)
+
     def into_tuple(self) -> GamePieceTuple:
         return (
             self.is_hole,
@@ -65,11 +69,8 @@ class BoardState:
             for c in range(4)
         }
         self.__game_pieces: List[GamePiece] = [
-            GamePiece(is_hole=hole, is_circle=circle, is_white=white, is_tall=tall)
-            for hole in [True, False]
-            for tall in [True, False]
-            for white in [True, False]
-            for circle in [True, False]
+            GamePiece.from_binary(tuple(map(lambda s: bool(int(s)), "{0:b}".format(i).zfill(4))))
+            for i in range(16)
         ]
         self.__win_states: Dict[BoardState.WIN_STATE_KEY, BoardState.WIN_STATE_DATA] = dict()
         self.win_state: Optional[Tuple[BoardState.WinType, BoardState.ID]] = None
@@ -140,6 +141,8 @@ class BoardState:
     def __setitem__(self, index: ID, value: DATA):
         (x,y) = index
         if (x < 4) & (y < 4):
+            if self.__board[index] is not None:
+                raise Exception(f"The index {index} already has a value!")
             if value is not None:
                 self.__board[index] = value
                 self.last_move = ((x, y), value)
