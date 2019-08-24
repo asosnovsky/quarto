@@ -99,7 +99,7 @@ class AITrainer:
 
     def __init__(self, model: AIModel, params: Optional[AITrainerParams] = None):
         self.model = model
-        self.memeory = AIMemory()
+        self.memory = AIMemory()
         self.params: AITrainerParams = params if params is not None else AITrainerParams()
         # self.win_reward = win_reward
         # self.loss_reward = loss_reward
@@ -115,12 +115,18 @@ class AITrainer:
             action = self.model.predict_next_placement_move(state)
             if board[action] is not None:
                 self.model.fit_next_placement_move(state, action, self.params.bad_move_reward)
+                if not dont_record:
+                    self.memory.game_phistory.append(AIMemory.HistGamePlacementRecord(
+                        self.memory.current_game_id,
+                        state, action,
+                        self.params.bad_move_reward
+                    ))
             else:
                 break
         if board[action] is not None:
             raise Exception("Still can't find next placement")
         if not dont_record:
-            self.memeory.record_placement(state, action)
+            self.memory.record_placement(state, action)
         return action
 
     def determine_giving_action(self, board: BoardState, dont_record = True) -> int:
@@ -131,12 +137,18 @@ class AITrainer:
             action = self.model.predict_next_giving_move(state)
             if board.is_piece_id_in_board(action):
                 self.model.fit_next_giving_move(state, action, self.params.bad_move_reward)
+                if not dont_record:
+                    self.memory.game_ghistory.append(AIMemory.HistGameGivingRecord(
+                        self.memory.current_game_id,
+                        state, action,
+                        self.params.bad_move_reward
+                    ))
             else:
                 break
         if board.is_piece_id_in_board(action):
             raise Exception("Still can't find next piece")
         if not dont_record:
-            self.memeory.record_giving(state, action)
+            self.memory.record_giving(state, action)
         return action
 
     def digest(self, as_winner: bool, is_tie = False):
@@ -146,7 +158,7 @@ class AITrainer:
                 reward = self.params.tie_reward
             else:
                 reward = self.params.loss_reward
-        rgiter = self.memeory.into_recent_game_iter()
+        rgiter = self.memory.into_recent_game_iter()
         grecord, precord = next(rgiter)
         i = 0
         while True:
@@ -160,7 +172,7 @@ class AITrainer:
                 break
 
     def retrain(self):
-        for gr, pr in self.memeory.into_full_hist_iter():
+        for gr, pr in self.memory.into_full_hist_iter():
             self.model.fit_next_placement_move(pr.state, pr.action, pr.reward)
             self.model.fit_next_giving_move(gr.state, gr.action, gr.reward)
 
