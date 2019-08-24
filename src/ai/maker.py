@@ -17,18 +17,22 @@ class AIPlayerMaker:
     def select_giving_piece(self, board: BoardState, cur_piece: Optional[GamePiece]) -> BoardState.DATA:
         pass
     def __call__(self, board: BoardState) -> BoardState:
-        cur_piece = board.cpiece
-        if cur_piece is not None:
-            move = self.select_piece_placement(board, cur_piece)
-            if move is not None:
-                board[move] = board.cpiece_id
-            else:
-                board[choice(list(board.open_spots))] = board.cpiece_id
-
-        board.cpiece_id = self.select_giving_piece(board, cur_piece)
-
-        if (board.cpiece_id is None) and not board.is_full:
-            board.cpiece_id, _ = choice(list(board.unused_game_pieces))
+        if not board.is_full:
+            cur_piece = board.cpiece
+            if cur_piece is not None:
+                move = self.select_piece_placement(board, cur_piece)
+                if move is not None:
+                    board[move] = board.cpiece_id
+                else:
+                    board[choice(list(board.open_spots))] = board.cpiece_id
+        else:
+            print("WARN: Attempting modify a full board with an AI")
+            
+        if not board.is_full:
+            board.cpiece_id = self.select_giving_piece(board, cur_piece)
+            if board.cpiece_id is None:
+                board.cpiece_id, _ = choice(list(board.unused_game_pieces))
+            
         return board
 
 def into_aiplayer(cls) -> AIPlayer:
