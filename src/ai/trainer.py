@@ -80,7 +80,7 @@ class AIMemory:
             self.game_phistory.append(AIMemory.HistGamePlacementRecord(*pr, prew))
         self.current_game_ghistory = []
         self.current_game_phistory = []
-        self.current_game_id = 0
+        self.current_game_id += 1
     
     def into_full_hist_iter(self):
         for gr, pr in zip(self.game_ghistory, self.game_phistory):
