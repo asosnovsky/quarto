@@ -79,7 +79,23 @@ class QNNAI(AIModel):
         else:
             b_np, cp = state
             X = np.append(b_np.reshape(16,5), np.array([*cp, True]).reshape(1,5), axis=0).reshape(1, 17, 5)
-            _, _, move = self.predict_next_action_place_pair(X)
+            Q, a, move = self.predict_next_action_place_pair(X)
+            for _ in range(100):
+                if b_np[move[0], move[1], -1]:
+                    Q[b_np[:,:,-1].flatten()] = -1000
+                    self.pmodel.fit(
+                        x = X,
+                        y = Q.reshape(1,16),
+                        verbose=0
+                    )
+                    _, a, move = self.predict_next_action_place_pair(X)
+                else:
+                    return move
+            Q[b_np[:,:,-1].flatten()] = -100
+            a = Q.argmax()
+            move = (int(a / 4), a % 4)  
+            if b_np[move[0], move[1], -1]:
+                raise Exception("Still cannot find place valid piece")
             return move
 
     def fit_next_placement_move(self, state: STATE, action: ACTION, reward: float):
@@ -98,14 +114,29 @@ class QNNAI(AIModel):
             self.pdecay += 1
 
     def predict_next_giving_move(self, state: np.ndarray) -> int:
+        ep = state.reshape(16, 5)
+        ep = ep[ep[:,-1], :-1].dot([ 2**n for n in reversed(range(4)) ])
         if random() < self.params.gdrop_rate * ( self.params.drop_decy_rate ** self.gdecay ):
-            ep = state.reshape(16, 5)
-            ep = ep[ep[:,-1], :-1].dot([ 2**n for n in reversed(range(4)) ])
             allowed_moves = [ i for i in range(16) if i not in ep ] 
             return choice(allowed_moves)       
         else:
             X = state.reshape(1, 4, 4, 5)
-            _, piece = self.predict_next_action_give(X)
+            Q, piece = self.predict_next_action_give(X)
+            for _ in range(100):
+                if piece in ep:
+                    Q[ep] = -1000
+                    self.gmodel.fit(
+                        x = X,
+                        y = Q.reshape(1,16),
+                        verbose=0
+                    )
+                    _, piece = self.predict_next_action_give(X)
+                else:
+                    return piece
+            Q[ep] = -100
+            piece = Q.argmax()
+            if piece in ep:
+                raise Exception("Still cannot find valid piece")
             return piece
 
     def fit_next_giving_move(self, state: np.ndarray, p: int, reward: float):
