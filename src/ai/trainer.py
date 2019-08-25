@@ -1,7 +1,7 @@
 from tqdm import tqdm
 from abc import abstractmethod
 from typing import NamedTuple, Any, Tuple, List, Optional, Dict
-from numpy import ndarray
+from numpy import ndarray, append as np_append
 from ..boardstate import BoardState, GamePieceTuple, GamePiece
 from .maker import AIPlayerMaker, AIPlayer
 from .helpers import choose_none_winable_piece, run_sim_once
@@ -24,6 +24,13 @@ class AIModel:
     @abstractmethod
     def predict_next_giving_move(self, state: ndarray) -> int:
         pass
+    @abstractmethod
+    def prep_next_placement_move(self, state: STATE) -> ndarray:
+        pass
+    @abstractmethod
+    def prep_next_giving_move(self, state: ndarray) -> ndarray:
+        pass
+
     @abstractmethod
     def as_dict(self) -> Dict:
         pass
@@ -101,6 +108,7 @@ class AITrainer:
         self.model = model
         self.memory = AIMemory()
         self.params: AITrainerParams = params if params is not None else AITrainerParams()
+        self.stats = {"wins": 0, "losses": 0, "ties": 0}
         # self.win_reward = win_reward
         # self.loss_reward = loss_reward
         # self.tie_reward = tie_reward
@@ -156,8 +164,12 @@ class AITrainer:
         if not as_winner:
             if is_tie:
                 reward = self.params.tie_reward
+                self.stats["ties"] += 1
             else:
                 reward = self.params.loss_reward
+                self.stats["losses"] += 1
+        else:
+            self.stats["wins"] += 1
         rgiter = self.memory.into_recent_game_iter()
         grecord, precord = next(rgiter)
         i = 0
@@ -207,51 +219,56 @@ class AITrainer:
             }
 
     def train(self, ai_enemy: AIPlayer, rounds: int = 100):
-        for _ in tqdm(range(rounds), desc="Training...", position=0):
-            # init application
-            board = BoardState()
-            curr_player = 0
-            # randomly choose first piece
-            board = board.ai_random_move()
-            for _ in range(20):
-                if board.is_full:
-                    self.digest(False, True)
-                    break
-                if curr_player == 0:
-                    board[self.determine_placement_action(board, dont_record=False)] = board.cpiece_id
+        self.stats = {"wins": 0, "losses": 0, "ties": 0}
+        with tqdm(range(rounds), desc="Training...", position=0) as waiter:
+            for _ in waiter:
+                waiter.set_description(
+                    f'Trainning...vs {ai_enemy.__name__} {self.stats["wins"]}/{self.stats["losses"]}-{self.stats["ties"]}'
+                )
+                # init application
+                board = BoardState()
+                curr_player = 0
+                # randomly choose first piece
+                board = board.ai_random_move()
+                for _ in range(20):
                     if board.is_full:
                         self.digest(False, True)
                         break
-                    board.cpiece_id = self.determine_giving_action(board, dont_record=False)
-                else:
-                    board = ai_enemy(board)
-                if board.win_state is not None:
-                    self.digest(curr_player == 0)
-                    break
+                    if curr_player == 0:
+                        board[self.determine_placement_action(board, dont_record=False)] = board.cpiece_id
+                        if board.is_full:
+                            self.digest(False, True)
+                            break
+                        board.cpiece_id = self.determine_giving_action(board, dont_record=False)
+                    else:
+                        board = ai_enemy(board)
+                    if board.win_state is not None:
+                        self.digest(curr_player == 0)
+                        break
 
-                curr_player = 1 - curr_player
+                    curr_player = 1 - curr_player
 
-            # init application
-            board = BoardState()
-            curr_player = 0
-            # randomly choose first piece
-            board = board.ai_random_move()
-            for _ in range(20):
-                if board.is_full:
-                    self.digest(False, True)
-                    break
-                if curr_player == 1:
-                    board[self.determine_placement_action(board, dont_record=False)] = board.cpiece_id
+                # init application
+                board = BoardState()
+                curr_player = 0
+                # randomly choose first piece
+                board = board.ai_random_move()
+                for _ in range(20):
                     if board.is_full:
                         self.digest(False, True)
                         break
-                    board.cpiece_id = self.determine_giving_action(board, dont_record=False)
-                else:
-                    board = ai_enemy(board)
-                if board.win_state is not None:
-                    self.digest(curr_player == 0)
-                    break
+                    if curr_player == 1:
+                        board[self.determine_placement_action(board, dont_record=False)] = board.cpiece_id
+                        if board.is_full:
+                            self.digest(False, True)
+                            break
+                        board.cpiece_id = self.determine_giving_action(board, dont_record=False)
+                    else:
+                        board = ai_enemy(board)
+                    if board.win_state is not None:
+                        self.digest(curr_player == 0)
+                        break
 
-                curr_player = 1 - curr_player
+                    curr_player = 1 - curr_player
 
 

@@ -5,8 +5,18 @@ from random import random, choice
 from functools import reduce
 from typing import Iterator, Tuple, Dict, NamedTuple, Optional
 from src.boardstate import BoardState
-from src.ai.trainer import AITrainer, AIModel, STATE, ACTION
+from src.ai.trainer import AITrainer, AIModel, STATE, ACTION, AITrainerParams
 from src.ai import ai_dumb, ai_3, run_vizsim_once
+
+gmodel = keras.Sequential([
+    keras.layers.Conv2D(input_shape=(4,4,5), kernel_size=4, filters=1, strides=1),
+    keras.layers.Reshape((4,4)),
+    keras.layers.LSTM(10),
+    keras.layers.Dense(4, activation='relu'),
+    # keras.layers.Flatten(),
+    keras.layers.Dense(16, activation='tanh'),
+])
+gmodel.compile(optimizer='adamax',loss='mse')
 
 class QNNAIParams(NamedTuple):
     learning_rate: float = 0.1
@@ -38,17 +48,19 @@ class QNNAI(AIModel):
     def __init__(self, params: Optional[QNNAIParams] = None):
         AIModel.__init__(self, self.__class__.__name__)
         pmodel = keras.Sequential([
-            keras.layers.Conv1D(input_shape=(17,5), kernel_size=3, filters=3, strides=3),
+            keras.layers.Conv1D(input_shape=(17,5), kernel_size=4, filters=1, strides=1),
+            keras.layers.LSTM(10),
+            keras.layers.Dense(4, activation='relu'),
             keras.layers.Flatten(),
-            keras.layers.Dense(20),
             keras.layers.Dense(5),
             keras.layers.Dense(16, activation='tanh'),
         ])
         pmodel.compile(optimizer='adamax',loss='mse')
         gmodel = keras.Sequential([
-            keras.layers.Conv2D(input_shape=(4,4,5), kernel_size=3, filters=3, strides=3),
+            keras.layers.Conv2D(input_shape=(4,4,5), kernel_size=4, filters=1, strides=1),
+            keras.layers.LSTM(10),
+            keras.layers.Dense(4, activation='relu'),
             keras.layers.Flatten(),
-            keras.layers.Dense(20),
             keras.layers.Dense(5),
             keras.layers.Dense(16, activation='tanh'),
         ])
@@ -98,21 +110,6 @@ class QNNAI(AIModel):
                 raise Exception("Still cannot find place valid piece")
             return move
 
-    def fit_next_placement_move(self, state: STATE, action: ACTION, reward: float):
-        (b_np, cp) = state
-        X = np.append(b_np.reshape(16,5), np.array([*cp, True]).reshape(1,5), axis=0).reshape(1,17,5)
-        Q = self.pmodel.predict(X).reshape(16,)
-        a = action[0] * 4 + action[1]
-        Q[a] = Q[a]*(1-self.params.learning_rate) + self.params.learning_rate*( reward + self.params.discount_factor * Q.max() )
-        self.pmodel.fit(
-            x = X,
-            y = Q.reshape(1, 16),
-            verbose=0
-        )
-        self.trained_rounds[0] += 1
-        if self.trained_rounds[0] % 100 == 0:
-            self.pdecay += 1
-
     def predict_next_giving_move(self, state: np.ndarray) -> int:
         ep = state.reshape(16, 5)
         ep = ep[ep[:,-1], :-1].dot([ 2**n for n in reversed(range(4)) ])
@@ -139,8 +136,29 @@ class QNNAI(AIModel):
                 raise Exception("Still cannot find valid piece")
             return piece
 
+    def prep_next_placement_move(self, state: STATE) -> np.ndarray:
+        (b_np, cp) = state
+        return np.append(b_np.reshape(16,5), np.array([*cp, True]).reshape(1,5), axis=0).reshape(1,17,5)
+        
+    def fit_next_placement_move(self, state: STATE, action: ACTION, reward: float):
+        X = self.prep_next_placement_move(state)
+        Q = self.pmodel.predict(X).reshape(16,)
+        a = action[0] * 4 + action[1]
+        Q[a] = Q[a]*(1-self.params.learning_rate) + self.params.learning_rate*( reward + self.params.discount_factor * Q.max() )
+        self.pmodel.fit(
+            x = X,
+            y = Q.reshape(1, 16),
+            verbose=0
+        )
+        self.trained_rounds[0] += 1
+        if self.trained_rounds[0] % 100 == 0:
+            self.pdecay += 1
+
+    def prep_next_giving_move(self, state: np.ndarray) -> np.ndarray:
+        return state.reshape(1, 4, 4, 5)
+
     def fit_next_giving_move(self, state: np.ndarray, p: int, reward: float):
-        X = state.reshape(1, 4, 4, 5)
+        X = self.prep_next_giving_move(state)
         Q = self.gmodel.predict(X).reshape(16,)
         Q[p] = Q[p]*(1-self.params.learning_rate) + self.params.learning_rate*( reward + self.params.discount_factor * Q.max() )
         self.gmodel.fit(
@@ -154,23 +172,28 @@ class QNNAI(AIModel):
 
 
 
-trainer = AITrainer(QNNAI())
-
-# for i in range(10):
-#     trainer.train(ai_dumb, 10)
-#     run_vizsim_once(ai_dumb, trainer.as_ai_player())
+trainer = AITrainer(
+    QNNAI(),
+    params=AITrainerParams(
+        win_reward=10,
+        loss_reward=-5,
+        tie_reward=5
+    )
+)
 
 print("training against dumb-ai")
-trainer.train(ai_dumb, 1000)
-trainer.play_against(ai_dumb, rounds=100, load_bar_position=0)
+trainer.train(ai_dumb, 10)
 
 print("retraining...")
 trainer.retrain()
 trainer.play_against(ai_dumb, rounds=100, load_bar_position=0)
-trainer.play_against(ai_3, rounds=100, load_bar_position=0)
 
 print("training against ai3")
 trainer.train(ai_3, 1000)
+trainer.play_against(ai_dumb, rounds=100, load_bar_position=0)
+trainer.play_against(ai_3, rounds=100, load_bar_position=0)
+
+trainer.retrain()
 trainer.play_against(ai_dumb, rounds=100, load_bar_position=0)
 trainer.play_against(ai_3, rounds=100, load_bar_position=0)
 
@@ -199,3 +222,37 @@ open('model.json', 'w').write(
 # state = board.into_numpy(True)
 
 # trainer.model.predict_next_action_give(state.reshape(1,4,4,5))
+
+import pandas as pd
+
+ghist = pd.DataFrame(trainer.memory.game_ghistory)
+phist = pd.DataFrame(trainer.memory.game_phistory)
+
+ghist.to_pickle("ghist.pickle")
+phist.to_pickle("phist.pickle")
+
+row = trainer.memory.game_ghistory[0]
+
+trainer.memory
+
+ghist.loc[
+    lambda r: r.state.apply(lambda s: s[:,:,-1].all())
+]
+
+
+ghist.assign(
+    state = lambda x: x.state.apply(
+        lambda s: "|".join(
+            map(
+                lambda n: str(n).zfill(2),
+                s.dot([ 2**n for n in reversed(range(5)) ]).flatten()
+            )
+        )
+    )
+).groupby('state').apply(
+    lambda g: pd.Series({"n": len(g)})
+)
+import matplotlib.pyplot as plt
+
+plt.show()
+
