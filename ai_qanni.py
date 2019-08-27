@@ -8,15 +8,6 @@ from src.boardstate import BoardState
 from src.ai.trainer import AITrainer, AIModel, STATE, ACTION, AITrainerParams
 from src.ai import ai_dumb, ai_3, run_vizsim_once
 
-gmodel = keras.Sequential([
-    keras.layers.Conv2D(input_shape=(4,4,5), kernel_size=4, filters=1, strides=1),
-    keras.layers.Reshape((4,4)),
-    keras.layers.LSTM(10),
-    keras.layers.Dense(4, activation='relu'),
-    # keras.layers.Flatten(),
-    keras.layers.Dense(16, activation='tanh'),
-])
-gmodel.compile(optimizer='adamax',loss='mse')
 
 class QNNAIParams(NamedTuple):
     learning_rate: float = 0.1
@@ -48,23 +39,18 @@ class QNNAI(AIModel):
     def __init__(self, params: Optional[QNNAIParams] = None):
         AIModel.__init__(self, self.__class__.__name__)
         pmodel = keras.Sequential([
-            keras.layers.Conv1D(input_shape=(17,5), kernel_size=4, filters=1, strides=1),
-            keras.layers.LSTM(10),
-            keras.layers.Dense(4, activation='relu'),
-            keras.layers.Flatten(),
-            keras.layers.Dense(5),
+            keras.layers.Conv1D(input_shape=(17,5), kernel_size=2, filters=4, strides=1),
+            keras.layers.LSTM(4, activation='relu'),
             keras.layers.Dense(16, activation='tanh'),
         ])
-        pmodel.compile(optimizer='adamax',loss='mse')
+        pmodel.compile(optimizer='SGD',loss='mse')
         gmodel = keras.Sequential([
-            keras.layers.Conv2D(input_shape=(4,4,5), kernel_size=4, filters=1, strides=1),
-            keras.layers.LSTM(10),
-            keras.layers.Dense(4, activation='relu'),
-            keras.layers.Flatten(),
-            keras.layers.Dense(5),
+            keras.layers.Conv2D(input_shape=(4,4,5), kernel_size=2, filters=4, strides=1),
+            keras.layers.Reshape((9,4)),
+            keras.layers.LSTM(4, activation='relu'),
             keras.layers.Dense(16, activation='tanh'),
         ])
-        gmodel.compile(optimizer='adamax',loss='mse')
+        gmodel.compile(optimizer='SGD',loss='mse')
         self.pmodel = pmodel
         self.gmodel = gmodel
         self.params = params if params is not None else QNNAIParams()
@@ -82,15 +68,32 @@ class QNNAI(AIModel):
         Q = self.gmodel.predict(X).reshape(16)
         piece = Q.argmax()
         return Q, piece
+    
+    def prep_next_placement_move(self, state: STATE) -> np.ndarray:
+        (b_np, cp) = state
+        return np.append(b_np.reshape(16,5), np.array([*cp, True]).reshape(1,5), axis=0).reshape(1,17,5)
+      
+    def prep_next_giving_move(self, state: np.ndarray) -> np.ndarray:
+        return state.reshape(1, 4, 4, 5)
+
+    def prep_placement_target(self, X: np.ndarray, action: ACTION, reward: float) -> np.ndarray:
+        Q = self.pmodel.predict(X).reshape(16,)
+        a = action[0] * 4 + action[1]
+        Q[a] = Q[a]*(1-self.params.learning_rate) + self.params.learning_rate*( reward + self.params.discount_factor * Q.max() )
+        return Q.reshape(1, 16)
+    
+    def prep_giving_target(self, X: np.ndarray, p: int, reward: float) -> np.ndarray:
+        Q = self.gmodel.predict(X).reshape(16,)
+        Q[p] = Q[p]*(1-self.params.learning_rate) + self.params.learning_rate*( reward + self.params.discount_factor * Q.max() )
+        return Q.reshape(1, 16)
 
     def predict_next_placement_move(self, state: STATE) -> ACTION:
+        b_np, _ = state
         if random() < self.params.pdrop_rate * ( self.params.drop_decy_rate ** self.pdecay ):
-            b_np, _ = state
             a = choice([ i for i, chk in enumerate(~b_np[:,:,-1].flatten()) if chk ])
             return (int(a / 4), a % 4) 
         else:
-            b_np, cp = state
-            X = np.append(b_np.reshape(16,5), np.array([*cp, True]).reshape(1,5), axis=0).reshape(1, 17, 5)
+            X = self.prep_next_placement_move(state)
             Q, a, move = self.predict_next_action_place_pair(X)
             for _ in range(100):
                 if b_np[move[0], move[1], -1]:
@@ -117,7 +120,7 @@ class QNNAI(AIModel):
             allowed_moves = [ i for i in range(16) if i not in ep ] 
             return choice(allowed_moves)       
         else:
-            X = state.reshape(1, 4, 4, 5)
+            X = self.prep_next_giving_move(state)
             Q, piece = self.predict_next_action_give(X)
             for _ in range(100):
                 if piece in ep:
@@ -136,44 +139,29 @@ class QNNAI(AIModel):
                 raise Exception("Still cannot find valid piece")
             return piece
 
-    def prep_next_placement_move(self, state: STATE) -> np.ndarray:
-        (b_np, cp) = state
-        return np.append(b_np.reshape(16,5), np.array([*cp, True]).reshape(1,5), axis=0).reshape(1,17,5)
-        
-    def fit_next_placement_move(self, state: STATE, action: ACTION, reward: float):
-        X = self.prep_next_placement_move(state)
-        Q = self.pmodel.predict(X).reshape(16,)
-        a = action[0] * 4 + action[1]
-        Q[a] = Q[a]*(1-self.params.learning_rate) + self.params.learning_rate*( reward + self.params.discount_factor * Q.max() )
+    def fit_next_placement_move(self, X: np.ndarray, y: np.ndarray):
         self.pmodel.fit(
-            x = X,
-            y = Q.reshape(1, 16),
+            x = X, y = y,
             verbose=0
         )
         self.trained_rounds[0] += 1
         if self.trained_rounds[0] % 100 == 0:
             self.pdecay += 1
 
-    def prep_next_giving_move(self, state: np.ndarray) -> np.ndarray:
-        return state.reshape(1, 4, 4, 5)
-
-    def fit_next_giving_move(self, state: np.ndarray, p: int, reward: float):
-        X = self.prep_next_giving_move(state)
-        Q = self.gmodel.predict(X).reshape(16,)
-        Q[p] = Q[p]*(1-self.params.learning_rate) + self.params.learning_rate*( reward + self.params.discount_factor * Q.max() )
+    def fit_next_giving_move(self, X: np.ndarray, y: np.ndarray):
         self.gmodel.fit(
-            x = X,
-            y = Q.reshape(1, 16),
+            x = X, y = y,
+            # y = ,
             verbose=0
         )
         self.trained_rounds[1] += 1
         if self.trained_rounds[1] % 100 == 0:
             self.gdecay += 1
 
-
-
 trainer = AITrainer(
-    QNNAI(),
+    QNNAI(QNNAIParams(
+        learning_rate=0.9
+    )),
     params=AITrainerParams(
         win_reward=10,
         loss_reward=-5,
@@ -182,20 +170,20 @@ trainer = AITrainer(
 )
 
 print("training against dumb-ai")
-trainer.train(ai_dumb, 10)
+trainer.train(ai_dumb, 100)
 
 print("retraining...")
 trainer.retrain()
 trainer.play_against(ai_dumb, rounds=100, load_bar_position=0)
 
 print("training against ai3")
-trainer.train(ai_3, 1000)
+trainer.train(ai_3, 100)
 trainer.play_against(ai_dumb, rounds=100, load_bar_position=0)
 trainer.play_against(ai_3, rounds=100, load_bar_position=0)
 
 trainer.retrain()
 trainer.play_against(ai_dumb, rounds=100, load_bar_position=0)
-trainer.play_against(ai_3, rounds=100, load_bar_position=0)
+trainer.play_against(ai_3, rounds=10000, load_bar_position=0)
 
 print("retraining...")
 trainer.retrain()

@@ -1,7 +1,7 @@
 from tqdm import tqdm
 from abc import abstractmethod
 from typing import NamedTuple, Any, Tuple, List, Optional, Dict
-from numpy import ndarray, append as np_append
+from numpy import ndarray, concatenate as np_concatenate
 from ..boardstate import BoardState, GamePieceTuple, GamePiece
 from .maker import AIPlayerMaker, AIPlayer
 from .helpers import choose_none_winable_piece, run_sim_once
@@ -13,13 +13,13 @@ class AIModel:
     def __init__(self, name: str):
         self.__name__ = name
     @abstractmethod
-    def fit_next_placement_move(self, state: STATE, action: ACTION, reward: float):
+    def fit_next_placement_move(self, X: ndarray, y: ndarray):
         pass
     @abstractmethod
     def predict_next_placement_move(self, state: STATE) -> ACTION:
         pass
     @abstractmethod
-    def fit_next_giving_move(self, state: ndarray, action: int, reward: float):
+    def fit_next_giving_move(self, X: ndarray, y: ndarray):
         pass
     @abstractmethod
     def predict_next_giving_move(self, state: ndarray) -> int:
@@ -29,6 +29,12 @@ class AIModel:
         pass
     @abstractmethod
     def prep_next_giving_move(self, state: ndarray) -> ndarray:
+        pass
+    @abstractmethod
+    def prep_placement_target(self, X: ndarray, action: ACTION, reward: float) -> ndarray:
+        pass
+    @abstractmethod
+    def prep_giving_target(self, X: ndarray, action: int, reward: float) -> ndarray:
         pass
 
     @abstractmethod
@@ -109,11 +115,6 @@ class AITrainer:
         self.memory = AIMemory()
         self.params: AITrainerParams = params if params is not None else AITrainerParams()
         self.stats = {"wins": 0, "losses": 0, "ties": 0}
-        # self.win_reward = win_reward
-        # self.loss_reward = loss_reward
-        # self.tie_reward = tie_reward
-        # self.reward_df = reward_df
-        # self.bad_move_reward = bad_move_reward
 
     def determine_placement_action(self, board: BoardState, dont_record = True) -> ACTION:
         if board.cpiece is None:
@@ -122,7 +123,9 @@ class AITrainer:
         for _ in range(self.params.max_bad_iter):
             action = self.model.predict_next_placement_move(state)
             if board[action] is not None:
-                self.model.fit_next_placement_move(state, action, self.params.bad_move_reward)
+                X = self.model.prep_next_placement_move(state)
+                y = self.model.prep_placement_target(X, action, self.params.bad_move_reward)
+                self.model.fit_next_placement_move(X, y)
                 if not dont_record:
                     self.memory.game_phistory.append(AIMemory.HistGamePlacementRecord(
                         self.memory.current_game_id,
@@ -144,7 +147,9 @@ class AITrainer:
         for _ in range(self.params.max_bad_iter):
             action = self.model.predict_next_giving_move(state)
             if board.is_piece_id_in_board(action):
-                self.model.fit_next_giving_move(state, action, self.params.bad_move_reward)
+                X = self.model.prep_next_giving_move(state)
+                y = self.model.prep_giving_target(X, action, self.params.bad_move_reward)
+                self.model.fit_next_giving_move(X, y)
                 if not dont_record:
                     self.memory.game_ghistory.append(AIMemory.HistGameGivingRecord(
                         self.memory.current_game_id,
@@ -173,20 +178,38 @@ class AITrainer:
         rgiter = self.memory.into_recent_game_iter()
         grecord, precord = next(rgiter)
         i = 0
+        gX, pX = self.model.prep_next_giving_move(grecord.state), self.model.prep_next_placement_move(precord.state)
+        gY, pY = self.model.prep_giving_target(gX, grecord.action, reward), self.model.prep_placement_target(pX, precord.action, reward)
         while True:
-            rew = reward * ( self.params.reward_df**i )
-            self.model.fit_next_placement_move(precord.state, precord.action, rew)
-            self.model.fit_next_giving_move(grecord.state, grecord.action, rew)
+            reward *= ( self.params.reward_df**i )
             try:
-                grecord, precord = rgiter.send((rew, rew))
+                grecord, precord = rgiter.send((reward, reward))
+                gx, px = self.model.prep_next_giving_move(grecord.state), self.model.prep_next_placement_move(precord.state)
+                gy, py = self.model.prep_giving_target(gx, grecord.action, reward), self.model.prep_placement_target(px, precord.action, reward)
+                gX = np_concatenate((gX, gx), axis=0)
+                pX = np_concatenate((pX, px), axis=0)
+                gY = np_concatenate((gY, gy), axis=0)
+                pY = np_concatenate((pY, py), axis=0)
                 i += 1
             except StopIteration:
                 break
+        self.model.fit_next_giving_move(gX, gY)
+        self.model.fit_next_placement_move(pX, pY)
 
     def retrain(self):
-        for gr, pr in self.memory.into_full_hist_iter():
-            self.model.fit_next_placement_move(pr.state, pr.action, pr.reward)
-            self.model.fit_next_giving_move(gr.state, gr.action, gr.reward)
+        iter = self.memory.into_full_hist_iter()
+        gr, pr = next(iter)
+        gX, pX = self.model.prep_next_giving_move(gr.state), self.model.prep_next_placement_move(pr.state)
+        gY, pY = self.model.prep_giving_target(gX, gr.action, gr.reward), self.model.prep_placement_target(pX, pr.action, pr.reward)
+        for gr, pr in iter:
+            gx, px = self.model.prep_next_giving_move(gr.state), self.model.prep_next_placement_move(pr.state)
+            gy, py = self.model.prep_giving_target(gx, gr.action, gr.reward), self.model.prep_placement_target(px, pr.action, pr.reward)
+            gX = np_concatenate((gX, gx), axis=0)
+            pX = np_concatenate((pX, px), axis=0)
+            gY = np_concatenate((gY, gy), axis=0)
+            pY = np_concatenate((pY, py), axis=0)
+        self.model.fit_next_giving_move(gX, gY)
+        self.model.fit_next_placement_move(pX, pY)
 
     def as_ai_player(self) -> AIPlayer:
         class AI(AIPlayerMaker):
@@ -202,16 +225,20 @@ class AITrainer:
     def play_against(self, ai: AIPlayer, me_first = False, rounds = 1, load_bar_position = 0):
         stats = {'Player 1': 0, 'Player 2': 0, None: 0}
         if me_first:
-            for _ in tqdm(range(rounds), desc=f"ai vs aiq", position=load_bar_position):
-                stats[run_sim_once(self.as_ai_player(), ai, use_names=False)] += 1
+            with tqdm(range(rounds), desc=f"ai vs aiq", position=load_bar_position) as waiter:
+                waiter.set_description(f"{ai.__name__} vs aiq {stats['Player 1']}/{stats['Player 2']}-{stats[None]}")
+                for _ in waiter:
+                    stats[run_sim_once(self.as_ai_player(), ai, use_names=False)] += 1
             return {
                 "QAI": stats['Player 1'],
                 "ai": stats['Player 2'],
                 "Tie": stats[None],
             }
         else:
-            for _ in tqdm(range(rounds), desc=f"aiq vs ai", position=load_bar_position):
-                stats[run_sim_once(ai, self.as_ai_player(), use_names=False)] += 1
+            with tqdm(range(rounds), desc=f"ai vs aiq", position=load_bar_position) as waiter:
+                for _ in waiter:
+                    waiter.set_description(f"aiq vs {ai.__name__} {stats['Player 1']}/{stats['Player 2']}-{stats[None]}")
+                    stats[run_sim_once(ai, self.as_ai_player(), use_names=False)] += 1
             return {
                 "ai": stats['Player 1'],
                 "QAI": stats['Player 2'],
